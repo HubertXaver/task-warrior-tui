@@ -1,96 +1,154 @@
-use derive_new::new;
+use commands::tokenizer::{tokenize, TokenType};
 use eyre::Result;
-use std::process::Command;
 
-use tui::widgets::ListState;
+use self::habit::{Habit, HabitTracker};
 
 pub mod pomodoro;
 pub mod ui;
 
-pub enum InputMode {
-    Normal,
-    Editing,
-    Pomodoro,
+pub mod habit;
+
+#[derive(Default, Debug, Clone)]
+pub struct AppState {
+    selected_row: Option<usize>,
+    selected_column: Option<usize>,
 }
+
+impl AppState {
+    pub fn selected(&self) -> Option<(usize, usize)> {
+        if self.selected_row == None || self.selected_column == None {
+            return None;
+        }
+        Some((self.selected_row.unwrap(), self.selected_column.unwrap()))
+    }
+
+    pub fn select(&mut self, (row, col): (usize, usize)) {
+        self.selected_column = Some(col);
+        self.selected_row = Some(row)
+    }
+}
+
+#[derive(Debug, Clone)]
+pub enum AppMode {
+    NORMAL,
+    COMMAND,
+}
+
+#[derive(Debug, Clone)]
 pub struct App {
+    pub mode: AppMode,
+    pub state: AppState,
+    pub tracker: HabitTracker,
     pub input: String,
-    pub mode: InputMode,
-    pub messages: Vec<String>,
-    pub state: ListState,
 }
 
 impl App {
     pub fn new() -> Result<App> {
-        let mut app = App {
+        let app = App {
+            state: AppState::default(),
+            tracker: HabitTracker::random(),
+            mode: AppMode::NORMAL,
             input: String::new(),
-            mode: InputMode::Normal,
-            messages: Vec::new(),
-            state: ListState::default(),
         };
-        app.get_tasks()?;
-        app.next_task();
         return Ok(app);
     }
 
-    pub fn next_task(&mut self) {
-        let i = match self.state.selected() {
-            Some(i) => {
-                if i >= self.messages.len() - 1 {
-                    0
+    pub fn enter_command_mode(&mut self) {
+        self.input = String::new();
+        self.mode = AppMode::COMMAND;
+    }
+
+    pub fn execute_input(&mut self) {
+        let input = self.input.as_str();
+        if let Ok(tokens) = tokenize(input) {
+            if tokens[0].text == "add".to_owned() {
+                if tokens.len() != 3 && tokens[2].token_type != TokenType::Whitespace {
+                    self.input = "[1] Error! please use format `add 'habit name'`".to_owned();
+                    return;
                 } else {
-                    i + 1
+                    self.add_habit(tokens[2].text.to_owned());
+                    return;
+                }
+            } else {
+                self.input = "[3] Error! please use format `add 'habit name'`".to_owned();
+                return;
+            }
+        } else {
+            self.input = "[2] Error! please use format `add 'habit name'`".to_owned();
+        }
+    }
+
+    pub fn add_habit(&mut self, habit: String) {
+        self.tracker.habits.push(Habit {
+            label: habit,
+            done_dates: vec![],
+        })
+    }
+    pub fn check(&mut self) {
+        if self.state.selected().is_none() {
+            return;
+        }
+        let (row, col) = self.state.selected().unwrap();
+        let date = self.tracker.get_date_range()[col];
+        self.tracker.habits[row].check_task(date);
+    }
+
+    pub fn down(&mut self) {
+        let i = match self.state.selected() {
+            Some((row, col)) => {
+                if row == self.tracker.values().len() - 1 {
+                    (0, col)
+                } else {
+                    (row + 1, col)
                 }
             }
-            None => 0,
+            None => (0, 0),
         };
-        self.state.select(Some(i));
+        self.state.select(i)
     }
 
-    pub fn previous_task(&mut self) {
+    pub fn up(&mut self) {
         let i = match self.state.selected() {
-            Some(i) => {
-                if i == 0 {
-                    self.messages.len() - 1
+            Some((row, col)) => {
+                if row == 0 {
+                    (self.tracker.values().len() - 1, col)
                 } else {
-                    i - 1
+                    (row - 1, col)
                 }
             }
-            None => 0,
+            None => (0, 0),
         };
-        self.state.select(Some(i));
+        self.state.select(i)
     }
 
-    pub fn unselect(&mut self) {
-        self.state.select(None);
-    }
-    pub fn add_task(&mut self, task: String) -> Result<()> {
-        let result = Command::new("task").arg("add").arg(task).output()?;
-        println!("{:?}", result.stderr);
-        Ok(())
-    }
-
-    pub fn get_tasks(&mut self) -> Result<()> {
-        let result = Command::new("task").output().unwrap();
-        let output = String::from_utf8_lossy(&result.stdout)
-            .to_string()
-            .split("\n")
-            .enumerate()
-            .filter(|(i, _)| match *i {
-                0 => false,
-                1 => false,
-                2 => false,
-                _ => true,
-            })
-            .map(|(_, t)| t.to_string())
-            .into_iter()
-            .map(|t| t.to_string())
-            .collect::<Vec<String>>();
-        self.messages = output;
-        Ok(())
+    pub fn left(&mut self) {
+        let i = match self.state.selected() {
+            Some((row, col)) => {
+                if col == 0 {
+                    self.tracker.previous_week();
+                    (row, self.tracker.values()[0].len() - 1)
+                } else {
+                    (row, col - 1)
+                }
+            }
+            None => (0, 0),
+        };
+        self.state.select(i)
     }
 
-    pub fn start_task(&mut self) -> Result<()> {
-        self.mode = InputMode::Pomodoro;
-        Ok(())
+    pub fn right(&mut self) {
+        let i = match self.state.selected() {
+            Some((row, col)) => {
+                let length = self.tracker.values()[0].len();
+                if col == length - 1 {
+                    self.tracker.next_week();
+                    (row, 0)
+                } else {
+                    (row, col + 1)
+                }
+            }
+            None => (0, 0),
+        };
+        self.state.select(i)
     }
 }

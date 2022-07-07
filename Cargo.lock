@@ -155,6 +155,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "commands"
+version = "0.0.5"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "688226b9769bbf11a9d82a94fb4adda15793a6023d33a8ca7695dbafec6f4123"
+
+[[package]]
 name = "constant_time_eq"
 version = "0.1.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1233,6 +1239,7 @@ name = "tuitui"
 version = "0.1.0"
 dependencies = [
  "chrono",
+ "commands",
  "crossterm",
  "derivative",
  "derive-new",
