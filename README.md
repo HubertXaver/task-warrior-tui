@@ -1,9 +1,5 @@
-# Easily view & add tasks to Taskwarrior while tracking them with the Pomodoro timer
+# Easily view and track your Habits from your terminal
 
-**Features** include
-
-1. View Tasks
-2. Add new tasks
-3. Start a task and track it using Pomodoro
-
-The ideal use case for this is where you have a terminal session open using TMUX to track all your tasks
+1. View Habit
+2. Track Habit
+3. Add Habit
